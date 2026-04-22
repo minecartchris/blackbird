@@ -1,9 +1,9 @@
--- minecartchris, main dev
+-- yabastar, main dev
 -- JackMacWindows, major bug fixes, PrimeUI
 -- RyanT, fixed an annoying bug JMW and I couldn't fix, selection menu
 -- minerobber, fixed a minor selection menu bug, fixed a bug that occured from fs.combine
 
-local ver = "v1.0.4 beta"
+local ver = "v1.0.0 bata"
 
 local expect = require "cc.expect".expect
 
@@ -1562,64 +1562,6 @@ end
 
 debug.protect(os.getComputerID)
 
--- Expose all CC:Tweaked libraries to the VM. See https://tweaked.cc/ for the
--- authoritative API docs. Most of these are already global in CC (we only
--- replaced fs/os/peripheral above); this block makes exposure explicit and
--- surfaces any missing library at boot instead of at first use.
-local ccLibraries = {
-    "colors", "colours", "commands", "disk", "gps", "help", "http", "io",
-    "keys", "multishell", "paintutils", "parallel", "pocket", "rednet",
-    "redstone", "settings", "term", "textutils", "turtle", "vector", "window",
-}
-for _, libName in ipairs(ccLibraries) do
-    local host = rawget(_G, libName)
-    if host == nil then host = _ENV[libName] end
-    if host ~= nil then
-        _G[libName] = host
-        _ENV[libName] = host
-        term.setTextColor(colors.lightGray)
-        io.write("[")
-        term.setTextColor(colors.green)
-        io.write("API ")
-        term.setTextColor(colors.lightGray)
-        io.write("] ")
-        term.setTextColor(colors.white)
-        print(libName)
-    else
-        term.setTextColor(colors.lightGray)
-        io.write("[")
-        term.setTextColor(colors.yellow)
-        io.write("skip")
-        term.setTextColor(colors.lightGray)
-        io.write("] ")
-        term.setTextColor(colors.white)
-        print(libName .. " (not available on this host)")
-    end
-end
-
--- Pre-load require-able cc.* modules so they're cached and guaranteed to
--- resolve from within the sandbox.
-local ccModules = {
-    "cc.audio.dfpwm", "cc.completion", "cc.expect", "cc.image.nft",
-    "cc.pretty", "cc.require", "cc.shell.completion", "cc.strings",
-}
-for _, modName in ipairs(ccModules) do
-    local ok = pcall(oldrequire, modName)
-    term.setTextColor(colors.lightGray)
-    io.write("[")
-    if ok then
-        term.setTextColor(colors.green)
-        io.write(" OK ")
-    else
-        term.setTextColor(colors.yellow)
-        io.write("skip")
-    end
-    term.setTextColor(colors.lightGray)
-    io.write("] ")
-    term.setTextColor(colors.white)
-    print(modName)
-end
-
 sleep(2)
 
 clear()
@@ -1628,19 +1570,34 @@ term.setTextColor(colors.yellow)
 print("blackbird VM")
 print(ver)
 
-if filelaunch then
-    os.run({}, filelaunch)
-else
-    os.run({}, "rom/programs/shell.lua")
+-- Load settings if settings file exists
+settings.load()
+
+-- Load VM-specific settings from config
+local cfgPath = "/blackbird/vmconfigs/" .. virfold .. "/config.lua"
+if oldfs.exists(cfgPath) then
+    dofile(cfgPath)
 end
+
+-- Track if we used a custom shell (for per-VM shell support)
+local usedCustomShell = filelaunch and filelaunch ~= ""
+local shellToRun = filelaunch or "rom/programs/shell.lua"
+
+if shellToRun then
+    os.run({}, shellToRun)
+end
+
+-- Restore host globals before running next shell or menu
 _G.fs = oldfs
+_G.package = oldpackage
+
+-- If custom shell exited, run default shell next
+if usedCustomShell then
+    os.run({}, "rom/programs/shell.lua")
+    -- Restore again after default shell
+    _G.fs = oldfs
     _G.package = oldpackage
-local data
-if fs.exists("/disk/keys/blackbird") then
-    file = fs.open("/disk/keys/blackbird", "r")
-    data = f
 end
-if data ~= "someuuid" then
-    os.run({}, "blackbird/init.lua")
-end
-print("admin found exiting blackbird VM")
+
+-- After all shells exit, go to menu
+mainUI()
