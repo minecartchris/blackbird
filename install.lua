@@ -17,6 +17,19 @@ else then
     shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/shells/cct.lua /blackbird/shells/cct.lua")
     shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/shells/klog.lua /blackbird/shells/klog.lua")
 end
+shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/blackbird.lua")
+term.clear()
+
+print("do you waant a startup file made to auto boot into blackbird?")
+print("1. Yes")
+print("2. No")
+local startupF = io.read()
+if startupF == 1 then
+    local file = fs.open("/startup.lua", "w")
+    file.write('shell.run("/blackbird.lua")')
+    file.close()
+end
+
 term.clear()
 print("Thank you for installing blackbird")
 print("your computer will reboot in ")
