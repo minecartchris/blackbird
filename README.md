@@ -1,4 +1,4 @@
-# whitebird
+# blackbird
 ## A virtual machine designed for ComputerCraft:Tweaked with modern features.
 
 Registered under GPLv3
