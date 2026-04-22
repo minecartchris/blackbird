@@ -4,7 +4,7 @@ term.clear()
 
 if not fs.exists("/blackbird/") then
     shell.run("mkdir /blackbird/")
-    shell.run("mkdir /blackbird/shells/") 
+    shell.run("mkdir /blackbird/shells/")
 end
 
 print("what shells do you want installed?")
@@ -14,47 +14,55 @@ print("3. all shells")
 local shellC = io.read()
 
 if shellC == 1 then
-    if fs.exists("/shells/cct.lua") then
+    if fs.exists("/blackbird/shells/cct.lua") then
         print("cc tweeked is already installed, do you want to redownload it?")
         print("1. Yes")
         print("2. No")
         local redownload = io.read()
         if redownload == 1 then
-            fs.remove("/blackbird/shells/cct.lua")
+            fs.delete("/blackbird/shells/cct.lua")
+        else
+            sleep(0.01)
         end
     end
     shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/shells/cct.lua /blackbird/shells/cct.lua")
 elseif shellC == 2 then
-    if fs.exists("/shells/klog.lua") then
+    if fs.exists("/blackbird/shells/klog.lua") then
         print("klog-cli is already installed, do you want to redownload it?")
         print("1. Yes")
         print("2. No")
         local redownload = io.read()
         if redownload == 1 then
-            fs.remove("/blackbird/shells/klog.lua")
+            fs.delete("/blackbird/shells/klog.lua")
+        else
+            sleep(0.01)
         end
     end
     shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/shells/klog.lua /blackbird/shells/klog.lua")
 else
-    if fs.exists("/shells/cct.lua") then
+    if fs.exists("/blackbird/shells/cct.lua") then
         print("cc tweeked is already installed, do you want to redownload it?")
         print("1. Yes")
         print("2. No")
         local redownload = io.read()
         if redownload == 1 then
-            fs.remove("/blackbird/shells/cct.lua")
+            fs.delete("/blackbird/shells/cct.lua")
+        else
+            sleep(0.01)
         end
     end
 
     shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/shells/cct.lua /blackbird/shells/cct.lua")
 
-    if fs.exists("/shells/klog.lua") then
+    if fs.exists("/blackbird/shells/klog.lua") then
         print("klog-cli is already installed, do you want to redownload it?")
         print("1. Yes")
         print("2. No")
         local redownload = io.read()
         if redownload == 1 then
-            fs.remove("/blackbird/shells/klog.lua")
+            fs.delete("/blackbird/shells/klog.lua")
+        else
+            sleep(0.01)
         end
     end
 
