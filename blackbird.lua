@@ -1,9 +1,9 @@
--- yabastar, main dev
+-- minecartchris, main dev
 -- JackMacWindows, major bug fixes, PrimeUI
 -- RyanT, fixed an annoying bug JMW and I couldn't fix, selection menu
 -- minerobber, fixed a minor selection menu bug, fixed a bug that occured from fs.combine
 
-local ver = "v1.0.0 bata"
+local ver = "v1.0.4 beta"
 
 local expect = require "cc.expect".expect
 
