@@ -774,87 +774,14 @@ local function starts(start, num)
     return string.sub(start,1,num)
 end
 
-local autostartRel = "blackbirdFiles/auto.lua"
-
-local function autostartPathFor(name)
-    return "/blackbird/vmdata/"..name.."/"..autostartRel
-end
-
-local function isValidVMName(name)
-    if type(name) ~= "string" then return false end
-    if name == "" or #name > 32 then return false end
-    if name:find("[^%w_%-%.]") then return false end
-    if name:sub(1, 1) == "." then return false end
-    if name:find("..", 1, true) then return false end
-    if name == "rom" then return false end
-    return true
-end
-
-local function readConfig(name)
-    local cfg = {}
-    local path = "/blackbird/vmconfigs/"..name.."/config.lua"
-    if not fs.exists(path) then return cfg end
-    local f = fs.open(path, "r")
-    if not f then return cfg end
-    local line = f.readLine()
-    while line do
-        line = line:gsub("\r$", "")
-        local k, v = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
-        if k then cfg[k] = v end
-        line = f.readLine()
-    end
-    f.close()
-    return cfg
-end
-
-local function writeConfig(name, cfg)
-    local path = "/blackbird/vmconfigs/"..name.."/config.lua"
-    local f = fs.open(path, "w")
-    if not f then return false end
-    for k, v in pairs(cfg) do
-        f.writeLine(k.."="..tostring(v))
-    end
-    f.close()
-    return true
-end
-
-local function clearAutostartVM()
-    if not fs.exists("/blackbird/vmdata") then return end
-    for _, v in ipairs(fs.list("/blackbird/vmdata")) do
-        if isValidVMName(v) then
-            local p = autostartPathFor(v)
-            if fs.exists(p) then fs.delete(p) end
-        end
-    end
-end
-
-local function setAutostartVM(name)
-    if not isValidVMName(name) then return false end
-    clearAutostartVM()
-    local dir = "/blackbird/vmdata/"..name.."/blackbirdFiles"
-    if not fs.exists(dir) then fs.makeDir(dir) end
-    local f = fs.open(autostartPathFor(name), "w")
-    if not f then return false end
-    f.write("-- autostart marker for blackbird VM\n")
-    f.close()
-    return true
-end
-
-local function findAutostartVM()
-    if not fs.exists("/blackbird/vmdata") then return nil end
-    for _, v in ipairs(fs.list("/blackbird/vmdata")) do
-        if isValidVMName(v) and fs.exists(autostartPathFor(v)) then
-            return v
-        end
-    end
-    return nil
-end
-
 clear()
 
-if not fs.exists("/blackbird/vmdata") then fs.makeDir("/blackbird/vmdata") end
-if not fs.exists("/blackbird/vmconfigs") then fs.makeDir("/blackbird/vmconfigs") end
-vms = fs.list("/blackbird/vmdata")
+if fs.exists("/blackbird/vmdata") then
+    vms = fs.list("/blackbird/vmdata")
+else
+    fs.makeDir("/blackbird/vmdata")
+    vms = fs.list("/blackbird/vmdata")
+end
 
 mainUI = function()
 PrimeUI.clear()
@@ -884,31 +811,31 @@ PrimeUI.clear()
 clear()
 
 if selection == "Create new VM" then
-    PrimeUI.label(term.current(), 3, 5, "Enter VM name")
-    PrimeUI.borderBox(term.current(), 4, 7, 40, 1)
-    PrimeUI.inputBox(term.current(), 4, 7, 40, "result")
-    local _, _, text = PrimeUI.run()
-    PrimeUI.clear()
-    clear()
-    if not isValidVMName(text) then
-        print("Invalid VM name. Allowed: letters, digits, _, -, . (no leading dot, no '..', max 32 chars).")
-        sleep(2)
-        return mainUI()
-    end
-    if fs.exists("/blackbird/vmdata/"..text) then
-        print("VM with same name was already found.")
-        sleep(2)
-        return mainUI()
-    end
-    fs.makeDir("/blackbird/vmdata/"..text)
-    fs.makeDir("/blackbird/vmconfigs/"..text)
-    writeConfig(text, {textnewID = 1})
-    return mainUI()
+	PrimeUI.label(term.current(), 3, 5, "Enter VM name")
+	PrimeUI.borderBox(term.current(), 4, 7, 40, 1)
+	PrimeUI.inputBox(term.current(), 4, 7, 40, "result")
+	local _, _, text = PrimeUI.run()
+	if fs.exists("/blackbird/vmdata/"..text) then
+		PrimeUI.clear()
+		clear()
+		print("VM with same name was already found. Rebooting")
+		sleep(2)
+		os.reboot()
+	else
+		PrimeUI.clear()
+		clear()
+		fs.makeDir("/blackbird/vmdata/"..text)
+        fs.makeDir("/blackbird/vmconfigs/"..text)
+        local startconfig = fs.open("/blackbird/vmconfigs/"..text.."/config.lua","w")
+        startconfig.write("textnewID=1")
+        startconfig.close()
+	end
+    mainUI()
 elseif selection == "Launch VM" then
     vms = fs.list("/blackbird/vmdata")
     local vmname = {}
     for _,v in ipairs(vms) do
-        if isValidVMName(v) then table.insert(vmname,1,v) end
+        table.insert(vmname,1,v)
     end
 
     local vmdesc = {}
@@ -921,18 +848,27 @@ elseif selection == "Launch VM" then
     PrimeUI.borderBox(term.current(), 4, 6, 40, 8)
     PrimeUI.selectionBox(term.current(), 4, 6, 40, 8, vmname, "done", function(option) redraw(vmdesc[option]) end)
     local _, _, selection = PrimeUI.run()
-    if selection == "Back" or not isValidVMName(selection) then
-        return mainUI()
+    if selection == "Back" then
+        mainUI()
+    elseif type(selection) == "string" then
+        local cfgPath = "/blackbird/vmconfigs/" .. selection .. "/config.lua"
+        if fs.exists(cfgPath) then
+            local ok, err = pcall(dofile, cfgPath)
+            if not ok then
+                printError("Config error: " .. tostring(err))
+            end
+        end
+        virfold = selection
+        _G.virfold = virfold
+        _ENV.virfold = virfold
+    else
+        mainUI()
     end
-    local cfg = readConfig(selection)
-    _G.textnewID = tonumber(cfg.textnewID) or 1
-    filelaunch = cfg.filelaunch
-    virfold = selection
 elseif selection == "Config menu" then
     vms = fs.list("/blackbird/vmdata")
     local vmname = {}
     for _,v in ipairs(vms) do
-        if isValidVMName(v) then table.insert(vmname,1,v) end
+        table.insert(vmname,1,v)
     end
 
     local vmdesc = {}
@@ -945,96 +881,119 @@ elseif selection == "Config menu" then
     PrimeUI.borderBox(term.current(), 4, 6, 40, 8)
     PrimeUI.selectionBox(term.current(), 4, 6, 40, 8, vmname, "done", function(option) redraw(vmdesc[option]) end)
     local _, _, selection = PrimeUI.run()
-    if selection == "Back" or not isValidVMName(selection) then
-        return mainUI()
+    if selection == "Back" then
+        mainUI()
     end
     local configname = {
         "Edit ID",
-        "List data",
-        "Set as autostart",
-        "Clear autostart",
-        "Back"
+        "Set shell",
+        "List data"
     }
+
     local configdesc = {
         "Edit the computer's ID",
-        "List config data",
-        "Auto-start this VM on boot",
-        "Remove autostart marker",
-        "Back"
+        "Set the shell to use",
+        "List config data"
     }
+    table.insert(configname, #configname+1, "Back")
+    table.insert(configdesc, #configdesc+1, "Back")
     PrimeUI.clear()
     local redraw = PrimeUI.textBox(term.current(), 3, 15, 40, 3, configdesc[1])
     PrimeUI.borderBox(term.current(), 4, 6, 40, 8)
     PrimeUI.selectionBox(term.current(), 4, 6, 40, 8, configname, "done", function(option) redraw(configdesc[option]) end)
     local _, _, selection2 = PrimeUI.run()
 
-    if selection2 == "Back" then
-        return mainUI()
-    elseif selection2 == "Edit ID" then
+    if selection2 == "Edit ID" then
         PrimeUI.clear()
         PrimeUI.label(term.current(), 3, 5, "Enter a new ID (number)")
         PrimeUI.borderBox(term.current(), 4, 7, 40, 1)
         PrimeUI.inputBox(term.current(), 4, 7, 40, "result")
-        local _, _, newIDText = PrimeUI.run()
-        local newID = tonumber(newIDText)
-        PrimeUI.clear()
-        clear()
-        if not newID then
-            print("Invalid ID. Must be a number.")
-            sleep(2)
-            return mainUI()
+local _, _, idResult = PrimeUI.run()
+
+        if idResult and idResult ~= "" then
+            _G.textnewID = tonumber(idResult) or idResult
         end
-        local cfg = readConfig(selection)
-        cfg.textnewID = newID
-        writeConfig(selection, cfg)
-        return mainUI()
+    elseif selection2 == "Set shell" then
+        PrimeUI.clear()
+        local shells = fs.list("/blackbird/shells")
+        local shellnames = {}
+        local shelldesc = {}
+        for _, s in ipairs(shells) do
+            if s:match("%.lua$") then
+                local name = s:sub(1, -5)
+                table.insert(shellnames, name)
+                table.insert(shelldesc, "Use " .. name .. " shell")
+            end
+        end
+        table.insert(shellnames, #shellnames+1, "Back")
+        table.insert(shelldesc, #shelldesc+1, "Back")
+        local redraw = PrimeUI.textBox(term.current(), 3, 15, 40, 3, shelldesc[1])
+        PrimeUI.borderBox(term.current(), 4, 6, 40, 8)
+        PrimeUI.selectionBox(term.current(), 4, 6, 40, 8, shellnames, "done", function(option) redraw(shelldesc[option]) end)
+        local _, _, shellsel = PrimeUI.run()
+        if not shellsel or shellsel == "Back" or type(shellsel) ~= "string" then
+            mainUI()
+            return
+        end
+        local shellPath = "blackbird/shells/" .. tostring(shellsel) .. ".lua"
+        if fs.exists(shellPath) then
+            _G.filelaunch = shellPath
+            print("Shell set to: " .. _G.filelaunch)
+        else
+            printError("Shell file not found: " .. shellPath)
+            mainUI()
+            return
+        end
+    elseif selection2 == "Back" then
+        mainUI()
     elseif selection2 == "List data" then
         PrimeUI.clear()
         clear()
-        local cfg = readConfig(selection)
-        local id = tonumber(cfg.textnewID) or 1
-        local launchInfo
-        if cfg.filelaunch and cfg.filelaunch ~= "" then
-            launchInfo = "seagull launchfile: "..cfg.filelaunch
-        else
-            launchInfo = "No seagull launchfile"
+        local cfgPath = "/blackbird/vmconfigs/" .. tostring(selection) .. "/config.lua"
+        textnewID = textnewID or 1
+        filelaunch = nil
+        if fs.exists(cfgPath) then
+            local oldID = textnewID
+            local oldLaunch = filelaunch
+            dofile(cfgPath)
+            textnewID = textnewID or oldID
+            filelaunch = filelaunch or oldLaunch
         end
-        local isAuto = fs.exists(autostartPathFor(selection))
-        local textdata = "ID: "..id.."\n"..launchInfo.."\nAutostart: "..tostring(isAuto)
+        if filelaunch then
+            iftruelaunch = "seagull launchfile: "..filelaunch
+        else
+            iftruelaunch = "No seagull launchfile"
+        end
 
+        local textdata = "ID: "..(textnewID or 1).."\n"..iftruelaunch
+        
         PrimeUI.borderBox(term.current(), 4, 6, 40, 10)
         local scroller = PrimeUI.scrollBox(term.current(), 4, 6, 40, 10, 9000, true, true)
         PrimeUI.drawText(scroller, textdata, true)
         PrimeUI.button(term.current(), 3, 18, "Done", "done")
         PrimeUI.keyAction(keys.enter, "done")
         PrimeUI.run()
-        return mainUI()
-    elseif selection2 == "Set as autostart" then
-        setAutostartVM(selection)
-        PrimeUI.clear()
-        clear()
-        print("Autostart set to: "..selection)
-        sleep(1)
-        return mainUI()
-    elseif selection2 == "Clear autostart" then
-        clearAutostartVM()
-        PrimeUI.clear()
-        clear()
-        print("Autostart cleared.")
-        sleep(1)
-        return mainUI()
+        mainUI()
     end
-    return mainUI()
+
+    local configdata = fs.open("/blackbird/vmconfigs/" .. tostring(selection) .. "/config.lua", "w")
+    local idToSave = textnewID or 1
+    configdata.write("textnewID=" .. tostring(idToSave))
+    if filelaunch and type(filelaunch) == "string" then
+        configdata.write("\nfilelaunch=" .. filelaunch)
+    end
+    configdata.close()
+    mainUI()
 elseif selection == "Delete VM" then
     vms = fs.list("/blackbird/vmdata/")
     local vmname = {}
     for _,v in ipairs(vms) do
-        if isValidVMName(v) then table.insert(vmname,1,v) end
+        table.insert(vmname,1,v)
     end
 
     local vmdesc = {}
     for _,_ in ipairs(vmname) do
-        table.insert(vmdesc,1,"Delete VM")
+        table.insert(vmdesc,1,"Config VM")
     end
     table.insert(vmname, #vmname+1, "Back")
     table.insert(vmdesc, #vmdesc+1, "Back")
@@ -1042,67 +1001,90 @@ elseif selection == "Delete VM" then
     PrimeUI.borderBox(term.current(), 4, 6, 40, 8)
     PrimeUI.selectionBox(term.current(), 4, 6, 40, 8, vmname, "done", function(option) redraw(vmdesc[option]) end)
     local _, _, selection = PrimeUI.run()
-    if selection == "Back" or not isValidVMName(selection) then
-        return mainUI()
+    if selection == "Back" then
+        mainUI()
+    else
+        fs.delete("/blackbird/vmdata/"..selection)
+        fs.delete("/blackbird/vmconfigs/"..selection)
+        mainUI()
     end
-    fs.delete("/blackbird/vmdata/"..selection)
-    fs.delete("/blackbird/vmconfigs/"..selection)
-    return mainUI()
 end
 end
-
-local function runAutostart()
-    local name = findAutostartVM()
-    if not name then return false end
-    PrimeUI.clear()
-    PrimeUI.label(term.current(), 3, 2, "blackbird VM")
-    PrimeUI.horizontalLine(term.current(), 3, 3, #("blackbird VM") + 2)
-    PrimeUI.label(term.current(), 3, 5, "Auto-starting VM: "..name)
-    PrimeUI.label(term.current(), 3, 7, "Press any key within 3s to cancel.")
-    PrimeUI.addTask(function()
-        os.pullEvent("key")
-        PrimeUI.resolve("cancel")
-    end)
-    PrimeUI.timeout(3, "go")
-    local first = PrimeUI.run()
-    if first == "timeout" then
-        local cfg = readConfig(name)
-        _G.textnewID = tonumber(cfg.textnewID) or 1
-        filelaunch = cfg.filelaunch
-        virfold = name
-        return true
-    end
-    return false
-end
-
-if not runAutostart() then
-    mainUI()
-end
+mainUI()
 
 PrimeUI.clear()
 
 local fs_combine = fs.combine
 local oldfs = fs
 local oldos = os
+local oldrequire = require
+local oldperipheral = peripheral
+local oldpackage = package
+_G.oldfs = oldfs
+_G.oldperipheral = oldperipheral
+_G.oldpackage = oldpackage
 _G.fs = {}
 _G.os = {}
+_G.peripheral = {}
+_G.package = oldpackage
 for k, v in pairs(oldfs) do fs[k] = v end
 for k, v in pairs(oldos) do os[k] = v end
+for k, v in pairs(oldperipheral) do peripheral[k] = v end
+
+local function wrappedRequire(modname)
+    return oldrequire(modname)
+end
+_G.require = wrappedRequire
+_ENV.require = wrappedRequire
+_G.virfold = virfold
+_ENV.virfold = virfold
+_G.textnewID = textnewID or 1
+_ENV.textnewID = textnewID or 1
+_G.oldperipheral = oldperipheral
+_G.oldfs = oldfs
+_G.oldos = oldos
+_G.oldpackage = oldpackage
+local function getRealPeripheral()
+    return oldperipheral
+end
+_ENV.getRealPeripheral = getRealPeripheral
 
 local function isVM(path)
-    local prefix = "/blackbird/vmdata/"..virfold
-    return path == prefix or string.sub(path, 1, #prefix + 1) == prefix.."/"
+    if not virfold then return false end
+    return string.find(path, "^/blackbird/vmdata/"..virfold) == 1
 end
 
 _ENV.os.getComputerID = function()
     return textnewID
 end
 
+_ENV.os.shutdown = function()
+    _G.fs = oldfs
+    _G.package = oldpackage
+    _G.os = {}
+    for k, v in pairs(oldos) do os[k] = v end
+    _G.peripheral = oldperipheral
+    _G.virfold = nil
+    mainUI()
+end
+
+_ENV.os.reboot = function()
+    _G.fs = oldfs
+    _G.package = oldpackage
+    _G.os = {}
+    for k, v in pairs(oldos) do os[k] = v end
+    _G.peripheral = oldperipheral
+    _G.virfold = nil
+    os.reboot()
+end
+
 _ENV.fs.open = function(path, mode)
     local cleanPath = fs_combine("/blackbird/vmdata/"..virfold, path)
-    local cleanRawPath = fs_combine(path)
+    local cleanRawPath = fs.combine(path)
 
     if starts(cleanRawPath,4) == "rom/" then
+        return oldfs.open(cleanRawPath, mode)
+    elseif string.find(cleanRawPath, "blackbird/shells") then
         return oldfs.open(cleanRawPath, mode)
     else
         if isVM(cleanPath) == true then
@@ -1115,37 +1097,37 @@ end
 
 _ENV.fs.list = function(path)
     local cleanPath = fs_combine("/blackbird/vmdata/"..virfold, path)
-    local cleanRawPath = fs_combine(path)
+    local cleanRawPath = fs.combine(path)
 
-    if starts(cleanRawPath,3) == "rom" then
-        return oldfs.list(cleanRawPath)
+    if starts(cleanRawPath,4) == "rom" then
+        return oldfs.list(cleanRawPath) or {}
+    elseif string.find(cleanRawPath, "blackbird/shells") then
+        return oldfs.list(cleanRawPath) or {}
+    elseif cleanRawPath == "" then
+        local data = oldfs.list(cleanPath) or {}
+        table.insert(data,1,"rom")
+        if fs.exists("/blackbird/shells") then
+            table.insert(data,1,"blackbird")
+        end
+        return data
     else
-        if cleanRawPath == "" then
-            if isVM(cleanPath) then
-                local data = oldfs.list(cleanPath)
-                table.insert(data,1,"rom")
-                return data
-            else
-                return nil
-            end
+        if isVM(cleanPath) == true then
+            return oldfs.list(cleanPath) or {}
         else
-            if isVM(cleanPath) == true then
-                return oldfs.list(cleanPath)
-            else
-                return nil
-            end
+            return oldfs.list(cleanRawPath) or {}
         end
     end
 end
 
 _ENV.fs.find = function(path)
     local cleanPath = fs_combine("/blackbird/vmdata/"..virfold, path)
-    local cleanRawPath = fs_combine(path)
+    local cleanRawPath = fs.combine(path)
     if starts(cleanRawPath,4) == "rom/" then
-        return oldfs.find(cleanRawPath)
+        return oldfs.find(cleanRawPath) or {}
+    elseif string.find(cleanRawPath, "blackbird/shells") then
+        return oldfs.find(cleanRawPath) or {}
     else
-        if not isVM(cleanPath) then return {} end
-        local foundFiles = oldfs.find(cleanPath)
+        local foundFiles = oldfs.find(cleanPath) or {}
         local modifiedPaths = {}
 
         for _, foundPath in ipairs(foundFiles) do
@@ -1159,20 +1141,16 @@ end
 
 _ENV.fs.isDir = function(path)
     local cleanPath = fs_combine("/blackbird/vmdata/"..virfold, path)
-    local cleanRawPath = fs_combine(path)
+    local cleanRawPath = fs.combine(path)
 
     if starts(cleanRawPath,4) == "rom/" then
-        return oldfs.isDir(cleanRawPath)
-    else
-        if cleanRawPath == "rom" then
-            return true
-        else
-            if isVM(cleanPath) == true then
-                return oldfs.isDir(cleanPath)
-            else
-                return nil
-            end
-        end
+        return oldfs.isDir(cleanRawPath) or false
+    elseif cleanRawPath == "rom" or cleanRawPath == "blackbird" then
+        return true
+    elseif isVM(cleanPath) == true then
+        return oldfs.isDir(cleanPath) or false
+else
+        return false
     end
 end
 
@@ -1181,7 +1159,6 @@ _ENV.fs.copy = function(path,dest)
     local cleanDest = fs_combine("/blackbird/vmdata/"..virfold, dest)
     local cleanRawPath = fs_combine(path)
 
-    if not isVM(cleanDest) then return nil end
     if starts(cleanRawPath,4) == "rom/" then
         return oldfs.copy(cleanRawPath,cleanDest)
     else
@@ -1353,15 +1330,13 @@ end
 
 _ENV.fs.exists = function(path)
     local cleanPath = fs_combine("/blackbird/vmdata/"..virfold, path)
-    local cleanRawPath = fs_combine(path)
-    if starts(cleanRawPath,4) == "rom/" or cleanRawPath == "rom" then
-        return oldfs.exists(cleanRawPath)
+    local cleanRawPath = fs.combine(path)
+    if starts(cleanRawPath,4) == "rom/" then
+        return oldfs.exists(cleanRawPath) or false
+    elseif starts(cleanRawPath,9) == "/blackbird" then
+        return oldfs.exists(cleanRawPath) or false
     else
-        if isVM(cleanPath) then
-            return oldfs.exists(cleanPath)
-        else
-            return false
-        end
+        return oldfs.exists(cleanPath) or false
     end
 end
 
@@ -1587,6 +1562,64 @@ end
 
 debug.protect(os.getComputerID)
 
+-- Expose all CC:Tweaked libraries to the VM. See https://tweaked.cc/ for the
+-- authoritative API docs. Most of these are already global in CC (we only
+-- replaced fs/os/peripheral above); this block makes exposure explicit and
+-- surfaces any missing library at boot instead of at first use.
+local ccLibraries = {
+    "colors", "colours", "commands", "disk", "gps", "help", "http", "io",
+    "keys", "multishell", "paintutils", "parallel", "pocket", "rednet",
+    "redstone", "settings", "term", "textutils", "turtle", "vector", "window",
+}
+for _, libName in ipairs(ccLibraries) do
+    local host = rawget(_G, libName)
+    if host == nil then host = _ENV[libName] end
+    if host ~= nil then
+        _G[libName] = host
+        _ENV[libName] = host
+        term.setTextColor(colors.lightGray)
+        io.write("[")
+        term.setTextColor(colors.green)
+        io.write("API ")
+        term.setTextColor(colors.lightGray)
+        io.write("] ")
+        term.setTextColor(colors.white)
+        print(libName)
+    else
+        term.setTextColor(colors.lightGray)
+        io.write("[")
+        term.setTextColor(colors.yellow)
+        io.write("skip")
+        term.setTextColor(colors.lightGray)
+        io.write("] ")
+        term.setTextColor(colors.white)
+        print(libName .. " (not available on this host)")
+    end
+end
+
+-- Pre-load require-able cc.* modules so they're cached and guaranteed to
+-- resolve from within the sandbox.
+local ccModules = {
+    "cc.audio.dfpwm", "cc.completion", "cc.expect", "cc.image.nft",
+    "cc.pretty", "cc.require", "cc.shell.completion", "cc.strings",
+}
+for _, modName in ipairs(ccModules) do
+    local ok = pcall(oldrequire, modName)
+    term.setTextColor(colors.lightGray)
+    io.write("[")
+    if ok then
+        term.setTextColor(colors.green)
+        io.write(" OK ")
+    else
+        term.setTextColor(colors.yellow)
+        io.write("skip")
+    end
+    term.setTextColor(colors.lightGray)
+    io.write("] ")
+    term.setTextColor(colors.white)
+    print(modName)
+end
+
 sleep(2)
 
 clear()
@@ -1594,20 +1627,20 @@ clear()
 term.setTextColor(colors.yellow)
 print("blackbird VM")
 print(ver)
-os.run({}, "rom/programs/shell.lua")
+
+if filelaunch then
+    os.run({}, filelaunch)
+else
+    os.run({}, "rom/programs/shell.lua")
+end
 _G.fs = oldfs
+    _G.package = oldpackage
 local data
 if fs.exists("/disk/keys/blackbird") then
-    local file = fs.open("/disk/keys/blackbird", "r")
-    if file then
-        data = file.readAll()
-        file.close()
-    end
+    file = fs.open("/disk/keys/blackbird", "r")
+    data = f
 end
-if data == "someuuid" then
-    print("admin found, exiting blackbird VM")
-    return
+if data ~= "someuuid" then
+    os.run({}, "blackbird/init.lua")
 end
-
-local self = (shell and shell.getRunningProgram and shell.getRunningProgram()) or "blackbird.lua"
-os.run({}, self)
+print("admin found exiting blackbird VM")
