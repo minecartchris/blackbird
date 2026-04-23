@@ -1583,10 +1583,20 @@ print(ver)
 -- Load settings if settings file exists
 settings.load()
 
--- Load VM-specific settings from config
+-- Load VM-specific settings from config.
+-- dofile() goes through the global fs.open, which at this point is the VM's
+-- sandboxed wrapper; that wrapper has no exemption for /blackbird/vmconfigs/
+-- and returns nil, so dofile raises "File not found". Swap fs to oldfs for
+-- the single call so loadfile() sees the real host filesystem, then restore.
 local cfgPath = "/blackbird/vmconfigs/" .. virfold .. "/config.lua"
 if oldfs.exists(cfgPath) then
-    dofile(cfgPath)
+    local sandboxedFs = _G.fs
+    _G.fs = oldfs
+    local ok, err = pcall(dofile, cfgPath)
+    _G.fs = sandboxedFs
+    if not ok then
+        printError("VM config error: " .. tostring(err))
+    end
 end
 
 -- Track if we used a custom shell (for per-VM shell support)
