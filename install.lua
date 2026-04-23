@@ -84,6 +84,16 @@ if not fs.exists("/startup.lua") then
     end
 end
 
+if not fs.exists("/update-shells.lua") then
+    print("do you want a update file made to auto boot into blackbird?")
+    print("1. Yes")
+    print("2. No")
+    local startupF = io.read()
+    if startupF == 1 then
+        shell.run("wget https://github.com/minecartchris/blackbird/raw/refs/heads/main/update-shells.lua")
+    end
+end
+
 
 term.clear()
 

@@ -851,6 +851,12 @@ elseif selection == "Launch VM" then
     if selection == "Back" then
         mainUI()
     elseif type(selection) == "string" then
+        -- Reset per-VM globals so stale values from a previous load can't
+        -- leak into this VM's environment.
+        _G.filelaunch = nil
+        _G.textnewID = nil
+        filelaunch = nil
+        textnewID = nil
         local cfgPath = "/blackbird/vmconfigs/" .. selection .. "/config.lua"
         if fs.exists(cfgPath) then
             local ok, err = pcall(dofile, cfgPath)
@@ -980,7 +986,11 @@ local _, _, idResult = PrimeUI.run()
     local idToSave = textnewID or 1
     configdata.write("textnewID=" .. tostring(idToSave))
     if filelaunch and type(filelaunch) == "string" then
-        configdata.write("\nfilelaunch=" .. filelaunch)
+        -- Write as a quoted Lua string so dofile() treats the path literally.
+        -- Previously this was `filelaunch=blackbird/shells/klog.lua` which Lua
+        -- parses as division between undefined identifiers and errors out,
+        -- leaving filelaunch nil at launch time.
+        configdata.write("\nfilelaunch=" .. string.format("%q", filelaunch))
     end
     configdata.close()
     mainUI()
